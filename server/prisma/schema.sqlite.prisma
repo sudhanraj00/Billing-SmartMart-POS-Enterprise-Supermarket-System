@@ -1,0 +1,467 @@
+// Local SQLite Development & Testing Prisma Schema for SmartMart POS
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  fullName     String
+  phone        String?
+  role         String    @default("CASHIER") // ADMIN, CASHIER, INVENTORY_MANAGER
+  managerPin   String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  invoices        Invoice[]        @relation("CashierInvoices")
+  approvedVoids   Invoice[]        @relation("ApprovedVoids")
+  heldSales       HeldSale[]
+  returnsHandled  Return[]         @relation("CashierReturns")
+  returnsApproved Return[]         @relation("ApprovedReturns")
+  shifts          CashierShift[]   @relation("CashierShifts")
+  approvedShifts  CashierShift[]   @relation("ApprovedShifts")
+  purchases       Purchase[]
+  stockMovements  StockMovement[]
+  auditLogs       AuditLog[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Store {
+  id                 String      @id @default(uuid())
+  name               String
+  legalName          String?
+  address            String
+  city               String
+  state              String
+  pincode            String
+  phone              String
+  email              String
+  gstin              String?
+  currencySymbol     String      @default("₹")
+  currencyCode       String      @default("INR")
+  invoicePrefix      String      @default("SM-")
+  receiptHeader      String?     @default("SmartMart Supermarket\nFresh Goods Everyday")
+  receiptFooter      String?     @default("Thank you for shopping with us!\nItems can be returned within 7 days with valid receipt.")
+  logoUrl            String?
+  pricingMode        String      @default("INCLUSIVE") // INCLUSIVE, EXCLUSIVE
+  allowNegativeStock Boolean     @default(false)
+  maxCashierDiscount Float       @default(10.00)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+}
+
+model Customer {
+  id                 String    @id @default(uuid())
+  name               String
+  phone              String    @unique
+  email              String?
+  address            String?
+  gstin              String?
+  outstandingBalance Float     @default(0.00)
+  creditLimit        Float     @default(5000.00)
+  isActive           Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  invoices  Invoice[]
+  heldSales HeldSale[]
+  returns   Return[]
+
+  @@index([phone])
+  @@index([name])
+}
+
+model Supplier {
+  id               String    @id @default(uuid())
+  name             String
+  contactPerson    String?
+  phone            String
+  email            String?
+  address          String?
+  gstin            String?
+  paymentTermsDays Int       @default(30)
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  products  Product[]
+  purchases Purchase[]
+
+  @@index([name])
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  code        String    @unique
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  products Product[]
+
+  @@index([code])
+}
+
+model Brand {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  products Product[]
+
+  @@index([name])
+}
+
+model Product {
+  id                 String    @id @default(uuid())
+  name               String
+  barcode            String    @unique
+  sku                String    @unique
+  description        String?
+  unitType           String    @default("PIECE") // PIECE, KG, GRAM, LITRE, ML, PACKET, BOX
+  sellingPrice       Float
+  costPrice          Float
+  taxRate            Float     @default(0.00)
+  isDiscountEligible Boolean   @default(true)
+  currentStock       Float     @default(0.00)
+  minStockLevel      Float     @default(10.00)
+  imageUrl           String?
+  batchNumber        String?
+  mfgDate            DateTime?
+  expiryDate         DateTime?
+  isActive           Boolean   @default(true)
+  isDeleted          Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  brandId String?
+  brand   Brand?  @relation(fields: [brandId], references: [id])
+
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+
+  batches        ProductBatch[]
+  stockMovements StockMovement[]
+  invoiceItems   InvoiceItem[]
+  purchaseItems  PurchaseItem[]
+  returnItems    ReturnItem[]
+
+  @@index([barcode])
+  @@index([sku])
+  @@index([name])
+  @@index([categoryId])
+  @@index([isActive, isDeleted])
+}
+
+model ProductBatch {
+  id           String    @id @default(uuid())
+  batchNumber  String
+  productId    String
+  product      Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity     Float     @default(0.00)
+  costPrice    Float
+  sellingPrice Float
+  mfgDate      DateTime?
+  expiryDate   DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@unique([productId, batchNumber])
+  @@index([expiryDate])
+}
+
+model StockMovement {
+  id               String   @id @default(uuid())
+  productId        String
+  product          Product  @relation(fields: [productId], references: [id])
+  previousQuantity Float
+  quantityChanged  Float
+  newQuantity      Float
+  movementType     String   // SALE, PURCHASE, RETURN_RESTOCK, ADJUSTMENT_DAMAGE, ADJUSTMENT_EXPIRED, ADJUSTMENT_WASTAGE, ADJUSTMENT_MANUAL, INITIAL
+  reason           String?
+  referenceId      String?
+  referenceType    String?
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  timestamp        DateTime @default(now())
+
+  @@index([productId])
+  @@index([movementType])
+  @@index([timestamp])
+}
+
+model Purchase {
+  id             String   @id @default(uuid())
+  purchaseNumber String   @unique
+  supplierId     String
+  supplier       Supplier @relation(fields: [supplierId], references: [id])
+  invoiceNumber  String?
+  invoiceDate    DateTime @default(now())
+  subtotal       Float
+  taxTotal       Float    @default(0.00)
+  grandTotal     Float
+  paymentStatus  String   @default("PAID") // PAID, PARTIAL, UNPAID
+  notes          String?
+  createdById    String
+  createdBy      User     @relation(fields: [createdById], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  items PurchaseItem[]
+
+  @@index([purchaseNumber])
+  @@index([supplierId])
+}
+
+model PurchaseItem {
+  id          String    @id @default(uuid())
+  purchaseId  String
+  purchase    Purchase  @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id])
+  batchNumber String?
+  quantity    Float
+  unitCost    Float
+  taxRate     Float     @default(0.00)
+  taxAmount   Float     @default(0.00)
+  lineTotal   Float
+  expiryDate  DateTime?
+
+  @@index([purchaseId])
+  @@index([productId])
+}
+
+model HeldSale {
+  id            String   @id @default(uuid())
+  referenceNote String?
+  cashierId     String
+  cashier       User     @relation(fields: [cashierId], references: [id])
+  customerId    String?
+  customer      Customer? @relation(fields: [customerId], references: [id])
+  itemsJson     String
+  subtotal      Float
+  discount      Float    @default(0.00)
+  tax           Float    @default(0.00)
+  total         Float
+  status        String   @default("HELD") // HELD, RESUMED, CANCELLED
+  heldAt        DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([cashierId])
+  @@index([status])
+}
+
+model Invoice {
+  id                   String   @id @default(uuid())
+  invoiceNumber        String   @unique
+  invoiceDate          DateTime @default(now())
+  cashierId            String
+  cashier              User     @relation("CashierInvoices", fields: [cashierId], references: [id])
+  customerId           String?
+  customer             Customer? @relation(fields: [customerId], references: [id])
+  customerName         String?
+  customerPhone        String?
+  subtotal             Float
+  itemDiscountTotal    Float    @default(0.00)
+  invoiceDiscountTotal Float    @default(0.00)
+  invoiceDiscountType  String   @default("NONE") // NONE, PERCENTAGE, FIXED
+  discountTotal        Float    @default(0.00)
+  taxTotal             Float    @default(0.00)
+  cgstTotal            Float    @default(0.00)
+  sgstTotal            Float    @default(0.00)
+  igstTotal            Float    @default(0.00)
+  roundOff             Float    @default(0.00)
+  grandTotal           Float
+  amountPaid           Float    @default(0.00)
+  balanceDue           Float    @default(0.00)
+  changeReturned       Float    @default(0.00)
+  paymentStatus        String   @default("PAID") // PAID, PARTIALLY_PAID, DUE
+  pricingMode          String   @default("INCLUSIVE") // INCLUSIVE, EXCLUSIVE
+  notes                String?
+  idempotencyKey       String?  @unique
+  status               String   @default("COMPLETED") // COMPLETED, REFUNDED, PARTIALLY_REFUNDED, VOIDED
+  voidReason           String?
+  voidApprovedById     String?
+  voidApprovedBy       User?    @relation("ApprovedVoids", fields: [voidApprovedById], references: [id])
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  items    InvoiceItem[]
+  payments Payment[]
+  returns  Return[]
+
+  @@index([invoiceNumber])
+  @@index([cashierId])
+  @@index([customerId])
+  @@index([invoiceDate])
+  @@index([status])
+}
+
+model InvoiceItem {
+  id             String   @id @default(uuid())
+  invoiceId      String
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productName    String
+  sku            String
+  barcode        String
+  quantity       Float
+  unitPrice      Float
+  costPrice      Float
+  discountType   String   @default("NONE") // NONE, PERCENTAGE, FIXED
+  discountValue  Float    @default(0.00)
+  discountAmount Float    @default(0.00)
+  taxRate        Float    @default(0.00)
+  taxAmount      Float    @default(0.00)
+  cgstAmount     Float    @default(0.00)
+  sgstAmount     Float    @default(0.00)
+  igstAmount     Float    @default(0.00)
+  lineTotal      Float
+  batchNumber    String?
+
+  returnItems ReturnItem[]
+
+  @@index([invoiceId])
+  @@index([productId])
+}
+
+model Payment {
+  id             String   @id @default(uuid())
+  invoiceId      String
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  amount         Float
+  paymentMethod  String   // CASH, UPI, CARD, BANK_TRANSFER, CREDIT
+  transactionRef String?
+  notes          String?
+  receivedAt     DateTime @default(now())
+
+  @@index([invoiceId])
+  @@index([paymentMethod])
+}
+
+model Return {
+  id               String   @id @default(uuid())
+  returnNumber     String   @unique
+  invoiceId        String
+  invoice          Invoice  @relation(fields: [invoiceId], references: [id])
+  customerId       String?
+  customer         Customer? @relation(fields: [customerId], references: [id])
+  cashierId        String
+  cashier          User     @relation("CashierReturns", fields: [cashierId], references: [id])
+  approvedById     String?
+  approvedBy       User?    @relation("ApprovedReturns", fields: [approvedById], references: [id])
+  reason           String
+  refundAmount     Float
+  refundMethod     String   @default("CASH") // CASH, UPI, CARD, CREDIT_NOTE, ORIGINAL
+  returnStatus     String   @default("COMPLETED") // COMPLETED, REJECTED
+  creditNoteNumber String?  @unique
+  createdAt        DateTime @default(now())
+
+  items ReturnItem[]
+
+  @@index([returnNumber])
+  @@index([invoiceId])
+  @@index([createdAt])
+}
+
+model ReturnItem {
+  id            String      @id @default(uuid())
+  returnId      String
+  return        Return      @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  invoiceItemId String
+  invoiceItem   InvoiceItem @relation(fields: [invoiceItemId], references: [id])
+  productId     String
+  product       Product     @relation(fields: [productId], references: [id])
+  quantity      Float
+  unitPrice     Float
+  refundAmount  Float
+  condition     String      @default("RESTOCKABLE") // RESTOCKABLE, DAMAGED
+  restocked     Boolean     @default(true)
+
+  @@index([returnId])
+  @@index([productId])
+}
+
+model TaxSetting {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique
+  rate      Float
+  cgstRate  Float    @default(0.00)
+  sgstRate  Float    @default(0.00)
+  igstRate  Float    @default(0.00)
+  isDefault Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model CashierShift {
+  id               String    @id @default(uuid())
+  cashierId        String
+  cashier          User      @relation("CashierShifts", fields: [cashierId], references: [id])
+  openedAt         DateTime  @default(now())
+  closedAt         DateTime?
+  openingCash      Float
+  totalCashSales   Float     @default(0.00)
+  totalCashRefunds Float     @default(0.00)
+  expectedCash     Float     @default(0.00)
+  actualCash       Float?
+  cashDifference   Float?
+  differenceReason String?
+  status           String    @default("OPEN") // OPEN, CLOSED
+  approvedById     String?
+  approvedBy       User?     @relation("ApprovedShifts", fields: [approvedById], references: [id])
+  notes            String?
+
+  @@index([cashierId])
+  @@index([status])
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  userId        String?
+  userName      String
+  userRole      String
+  action        String
+  entity        String
+  entityId      String?
+  oldValuesJson String?
+  newValuesJson String?
+  ipAddress     String?
+  userAgent     String?
+  timestamp     DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@index([entity])
+  @@index([timestamp])
+}
+
+model AppSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+
+  @@index([key])
+}

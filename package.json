@@ -1,0 +1,30 @@
+{
+  "name": "smartmart-pos",
+  "version": "1.0.0",
+  "description": "Production-ready Supermarket Billing and Inventory Management System",
+  "private": true,
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=server\" \"npm run dev --workspace=client\"",
+    "dev:server": "npm run dev --workspace=server",
+    "dev:client": "npm run dev --workspace=client",
+    "build": "npm run build --workspace=server && npm run build --workspace=client",
+    "test": "npm run test --workspace=server && npm run test --workspace=client",
+    "lint": "npm run lint --workspace=server && npm run lint --workspace=client",
+    "seed": "npm run seed --workspace=server",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "author": "SmartMart Engineering Team",
+  "license": "UNLICENSED"
+}
